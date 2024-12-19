@@ -17,15 +17,12 @@ After you have completed the pretraining phase of your model, you can perform a 
 - Canary Sample: A known reference sample used to test for direct data leaks.
 - **Uniform Distance Expansion** Sample (Ours): A baseline method to measure privacy risks by uniformly expanding the sample’s distance in input space.
 $$
-\begin{align*}
-    \mathcal{L}_{{ude}} (x_a) = \frac{1}{N}\sum_{i=1}^{N} \left( \ell\left(M'_i(x_a), y_a\right) - \ell\left(M_i(x_a), y_a\right) \right).
-\end{align*}
+\mathcal{L}_{ude}(x_a) = \frac{1}{N}\sum_{i=1}^{N} \left( \ell\left(M'_i(x_a), y_a\right) - \ell\left(M_i(x_a), y_a\right) \right).
 $$
+
 - **Adaptive Distance Expansion** Sample (Ours): An advanced method that adaptively expands distances based on the model’s behavior, potentially providing more sensitive and revealing insights.
 $$
-\begin{align*}
 \mathcal{L}_{{ade}} (x_a) = \frac{1}{N} \sum_{i=1}^{N} \mathrm{ReLU} \left( \ell\left(M'_i(x_a), y_a\right) - \frac{1}{N} \sum_{j=1}^{N} \ell\left(M_j(x_a), y_a\right) + \alpha \right).
-\end{align*}
 $$
 ```bash
 $ bash scripts/audit_mnist.sh
