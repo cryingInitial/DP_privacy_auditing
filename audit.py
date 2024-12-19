@@ -18,30 +18,24 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description='MIA')
     parser.add_argument('--dataset', type=str, default='mnist', help='Dataset')
-    parser.add_argument('--target', type=str, default='clipbkd', help='Target')
+    parser.add_argument('--target', type=str, default='blank', help='Target')
     parser.add_argument('--seeds', type=str, default='0,1,2,3,4,5,6,7', help='Seeds')
-    parser.add_argument('--eps', type=float, default=4.0, help='Eps')
-    parser.add_argument('--methods', type=str, default='subtract,ours', help='Methods')
-    parser.add_argument('--epochs', type=int, default=10, help='Epochs')
-    parser.add_argument('--surrogate', type=bool, default=True, help='Surrogate')
+    parser.add_argument('--eps', type=float, default=10.0, help='Eps')
+    parser.add_argument('--is_black_box', type=bool, default=False, help='is blackbox??')
     parser.add_argument('--lr', type=float, default=0.1, help='LR')
     return parser.parse_args()
 
 def get_attack_results(dataset='mnist', target='blank', seeds=[0,1,2,3,4,5,6,7], eps=4.0, methods=['subtract', 'ours'], epochs=10, surrogate=True, lr=0.1):
-    full_or_worst = 'worst' if worst else 'full'
     internal = 'black' if surrogate else 'white'
     base_eps, subtract_eps, ours_eps = 0, 0, 0
 
-    os.makedirs(f'results_{full_or_worst}_{alpha}/{dataset}_{target}/{internal}_{eps}', exist_ok=True)
-    with open(f'results_{full_or_worst}_{alpha}/{dataset}_{target}/{internal}_{eps}/{epochs}.txt', 'a') as f:
-        f.write(f'Epochs: {epochs}, Eps: {eps}, Alpha: {alpha}, dynamicY: {dynamicY}, dataset: {dataset}, target: {target} LR: {lr}\n')
+    os.makedirs(f'results/{dataset}_{target}/{internal}_{eps}', exist_ok=True)
+    with open(f'results/{dataset}_{target}/{internal}_{eps}/{epochs}.txt', 'a') as f:
+        f.write(f'Epochs: {epochs}, Eps: {eps}, dataset: {dataset}, target: {target} LR: {lr}\n')
     # PREPARE DIRECTORIES
     directories = []
     for seed in seeds:
-        if full_or_worst == 'worst':
-            directories.append(f'exp_data_{full_or_worst}/{dataset}_{target}_100/seed{seed}/{dataset}_half_cnn_eps{eps}')
-        else:
-            directories.append(f'exp_data_{full_or_worst}/{dataset}_{target}_100/seed{seed}/{dataset}_cnn_eps{eps}')
+        directories.append(f'exp_data/{dataset}_{target}_100/seed{seed}/{dataset}_cnn_eps{eps}')
 
     combs = []
     for seed in seeds: combs.append([seed])
@@ -49,7 +43,7 @@ def get_attack_results(dataset='mnist', target='blank', seeds=[0,1,2,3,4,5,6,7],
     for idx, comb in enumerate(combs):
         models_in, models_out, surrogate_models_in, surrogate_models_out = load_models(directories, comb, dataset)
         criterion = nn.CrossEntropyLoss()
-        base_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, path=f'results_full_{alpha}/{dataset}_{target}/{internal}_{eps}/base_{epochs}_{idx}.pdf')
+        base_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, path=f'results/{dataset}_{target}/{internal}_{eps}/base_{epochs}_{idx}.pdf')
         subtract_eps = base_eps
         ours_eps = base_eps
 
@@ -95,7 +89,7 @@ def get_attack_results(dataset='mnist', target='blank', seeds=[0,1,2,3,4,5,6,7],
                         loss = criterion(in_output, y) - criterion(out_output, y)
 
                     elif method == 'ours':
-                        loss = criterion(in_output, y) - mean_of_out_outputs_loss + alpha
+                        loss = criterion(in_output, y) - mean_of_out_outputs_loss + 0.2
                         loss = torch.clamp(loss, min=0)
                         losses_ins.append(criterion(in_output, y))
                         losses_outs.append(criterion(out_output, y))
@@ -114,22 +108,22 @@ def get_attack_results(dataset='mnist', target='blank', seeds=[0,1,2,3,4,5,6,7],
 
                 if surrogate:
                     if method == 'subtract': 
-                        renew_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, inputX=inputX, inputy=inputy, path=f'results_full_{alpha}/{dataset}_{target}/{internal}_{eps}/subtract_{epochs}_{idx}.pdf')
+                        renew_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, inputX=inputX, inputy=inputy, path=f'results/{dataset}_{target}/{internal}_{eps}/subtract_{epochs}_{idx}.pdf')
                         if renew_eps > subtract_eps:
                             print(f'New eps: {renew_eps}, Old eps: {subtract_eps}')
                             subtract_eps = renew_eps
                     elif method == 'ours':
-                        renew_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, inputX=inputX, inputy=inputy, path=f'results_full_{alpha}/{dataset}_{target}/{internal}_{eps}/ours_{epochs}_{idx}.pdf')
+                        renew_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, inputX=inputX, inputy=inputy, path=f'results/{dataset}_{target}/{internal}_{eps}/ours_{epochs}_{idx}.pdf')
                         if renew_eps > ours_eps:
                             print(f'New eps: {renew_eps}, Old eps: {ours_eps}')
                             ours_eps = renew_eps
             if not surrogate:
-                if method == 'subtract': subtract_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, inputX=inputX, inputy=inputy, path=f'results_full_{alpha}/{dataset}_{target}/{internal}_{eps}/subtract_{epochs}_{idx}.pdf')
-                elif method == 'ours': ours_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, inputX=inputX, inputy=inputy, path=f'results_full_{alpha}/{dataset}_{target}/{internal}_{eps}/ours_{epochs}_{idx}.pdf')
-                elif method == 'KL': ours_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, inputX=inputX, inputy=inputy, path=f'results_full_{alpha}/{dataset}_{target}/{internal}_{eps}/KL_{epochs}_{idx}.pdf')
+                if method == 'subtract': subtract_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, inputX=inputX, inputy=inputy, path=f'results/{dataset}_{target}/{internal}_{eps}/subtract_{epochs}_{idx}.pdf')
+                elif method == 'ours': ours_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, inputX=inputX, inputy=inputy, path=f'results/{dataset}_{target}/{internal}_{eps}/ours_{epochs}_{idx}.pdf')
+                elif method == 'KL': ours_eps = get_eps_from_loss(models_in, models_out, dataset, criterion, inputX=inputX, inputy=inputy, path=f'results/{dataset}_{target}/{internal}_{eps}/KL_{epochs}_{idx}.pdf')
 
-        os.makedirs(f'results_{full_or_worst}_{alpha}/{dataset}_{target}/{internal}_{eps}', exist_ok=True)
-        with open(f'results_{full_or_worst}_{alpha}/{dataset}_{target}/{internal}_{eps}/{epochs}.txt', 'a') as f:
+        os.makedirs(f'results/{dataset}_{target}/{internal}_{eps}', exist_ok=True)
+        with open(f'results/{dataset}_{target}/{internal}_{eps}/{epochs}.txt', 'a') as f:
             f.write(f'Base eps: {base_eps}, Subtract_eps: {subtract_eps}, Ours_eps: {ours_eps}\n')
 
 
@@ -191,6 +185,9 @@ def load_models(directories, comb, dataset):
             if 'attack' in model_loc:
                 if 'in' in model_loc: surrogate_models_in.append(model)
                 elif 'out' in model_loc: surrogate_models_out.append(model)
+            else:
+                if 'in' in model_loc: models_in.append(model)
+                elif 'out' in model_loc: models_out.append(model)
 
     print(f'Loaded {len(models_in)} in models and {len(models_out)} out models')
     print(f'Loaded {len(surrogate_models_in)} surrogate in models and {len(surrogate_models_out)} surrogate out models')
@@ -199,4 +196,5 @@ def load_models(directories, comb, dataset):
 
 if __name__ == '__main__':
     args = parse_args()
-    get_attack_results(dataset=args.dataset, target=args.target, eps=args.eps, epochs=args.epochs, surrogate=False, lr=args.lr)
+    args.seeds = [int(s) for s in args.seeds.split(',')]
+    get_attack_results(dataset=args.dataset, target=args.target, eps=args.eps, epochs=10, surrogate=args.is_black_box, lr=args.lr, seeds=args.seeds)   

@@ -22,11 +22,12 @@ def xavier_init_model(model):
     def init_weights(m):
         if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
             torch.nn.init.xavier_normal_(m.weight)
-            m.bias.data.fill_(0.01)
+            try: m.bias.data.fill_(0.01)
+            except: print("No bias at", m.__class__)
 
     model.apply(init_weights)
 
-def train_model(model_name, X, y, epsilon, delta, max_grad_norm, n_epochs, lr, device='cpu', init_model=None, block_size=1024, out_dim=10):
+def train_model(model_name, X, y, X_test, y_test, epsilon, delta, max_grad_norm, n_epochs, lr, device='cpu', init_model=None, block_size=1024, out_dim=10):
     """Train model w/ DP-SGD (no sub-sampling + gradients are summed instead of averaged)"""
     # initialize model, loss function, and optimizer
     if init_model is None:
@@ -51,6 +52,8 @@ def train_model(model_name, X, y, epsilon, delta, max_grad_norm, n_epochs, lr, d
         optimizer.zero_grad()
 
         accum_grad, curr_grad_norms = clip_and_accum_grads(model, X, y, optimizer, criterion, max_grad_norm, block_size=block_size)
+        # if epoch % 10 == 0:
+        #     print(f"accuracy: {test_model(model, X_test, y_test)}")
         if epoch == 0:
             # save per-sample gradient norms from first epoch
             grad_norms.append(curr_grad_norms)
@@ -163,7 +166,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_name', type=str, default='mnist', help='dataset to use (mnist, cifar10, cifar100)')
     parser.add_argument('--model_name', type=str, default='lr', choices=list(Models.keys()), help='model to audit')
-    parser.add_argument('--n_reps', type=int, default=200, help='number of models')
+    parser.add_argument('--n_reps', type=int, default=256, help='number of models')
     parser.add_argument('--n_df', type=int, default=0, help='|D| (0 => use full dataset)')
     parser.add_argument('--n_epochs', type=int, default=100, help='number of epochs to train for')
     parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
@@ -185,7 +188,7 @@ if __name__ == '__main__':
     # reproducibility
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-
+    
     out_folder = f'{args.out}/{args.data_name}_{args.model_name}_eps{args.epsilon}'
     device = args.device if torch.cuda.is_available() else 'cpu'
 
@@ -199,22 +202,41 @@ if __name__ == '__main__':
     init_model = None
     if args.fixed_init is not None:
         init_model = Models[args.model_name](X_out.shape, out_dim=out_dim).to(device)
-
+        
         if args.fixed_init == '':
             # initialize model (average-case)
+            print("Initializing model with xavier initialization")
             xavier_init_model(init_model)
         else:
+            # always raise error here
+            assert False, 'Not implemented'
+
             # load weights from path (worst-case)
             init_model.load_state_dict(torch.load(args.fixed_init))
     
     # craft target data point (x_T, y_T)
     if args.target_type == 'blank':
         # blank sample
+        print("Using blank sample")
         target_X = torch.zeros_like(X_out[[0]])
         target_y = torch.from_numpy(np.array([9])).to(device)
+    elif args.target_type == 'mislabel':
+        # mislabel sample
+        print("Using mislabel sample")
+        target_X = X_out[[0]]
+        target_y = choose_worstcase_label(init_model, target_X)
+        X_out = X_out[1:]
+        y_out = y_out[1:]
     elif args.target_type == 'clipbkd':
         # ClipBKD sample
+        print("Using ClipBKD sample")
         target_X, target_y = craft_clipbkd(X_out, init_model, device)
+    elif args.target_type == 'ordinary':
+        print("Using ordinary sample")
+        target_X = X_out[[0]]
+        target_y = y_out[[0]]
+        X_out = X_out[1:]
+        y_out = y_out[1:]
     elif os.path.exists(args.target_type):
         # pre-crafted target sample
         target_X = torch.from_numpy(np.load(args.target_type)).to(device)
@@ -227,12 +249,17 @@ if __name__ == '__main__':
 
     # define D = D- U {(x_T, y_T)}
     X_in, y_in = torch.vstack((X_out, target_X)), torch.cat((y_out, target_y))
-
+    print(X_in.shape, y_in.shape)
     # handle case where n_df = 1
     X_out, y_out = X_out[:args.n_df - 1], y_out[:args.n_df - 1]
 
     # load test dataset
     X_test, y_test, _ = load_data(args.data_name, None, split='test', device=device)
+    
+    # save target
+    os.makedirs(out_folder, exist_ok=True)
+    np.save(f'{out_folder}/target_X.npy', target_X.cpu().numpy())
+    np.save(f'{out_folder}/target_y.npy', target_y.cpu().numpy())
     
     # train M on D and D-
     # resume from checkpoint
@@ -247,7 +274,7 @@ if __name__ == '__main__':
 
         for rep in tqdm(range(reps_completed, args.n_reps // 2), initial=reps_completed, total=args.n_reps // 2):
             # train model
-            model, grad_norms = train_model(args.model_name, curr_X, curr_y, args.epsilon, args.delta,
+            model, grad_norms = train_model(args.model_name, curr_X, curr_y, X_test, y_test, args.epsilon, args.delta,
                 args.max_grad_norm, args.n_epochs, args.lr, device=device, init_model=init_model,
                 block_size=args.block_size, out_dim=out_dim)
             
@@ -266,7 +293,9 @@ if __name__ == '__main__':
                 if len(X_out) > 0:
                     train_set_accs.append(test_model(model, X_out, y_out))
                 test_set_accs.append(test_model(model, X_test, y_test))
-            
+            # save model before release
+            os.makedirs(f'{out_folder}/models', exist_ok=True)
+            torch.save(model.state_dict(), f'{out_folder}/models/{world}_model_{rep}.pt')
             # free CUDA memory
             del model
             torch.cuda.empty_cache()

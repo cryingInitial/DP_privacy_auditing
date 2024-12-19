@@ -1,7 +1,7 @@
 SEEDS=(0)
 EPS=(10.0)
 GPUS=(0)
-TARGET_TYPE="clipbkd"
+TARGET_TYPE="blank"
 N_EPOCHS=100
 SEP="_"
 

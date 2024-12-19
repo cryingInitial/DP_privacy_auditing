@@ -19,7 +19,7 @@ parser.add_argument('--canary', type=str, default='blank')
 parser.add_argument('--epsilon', type=float, default=10.0)
 args = parser.parse_args()
 
-path = f"exp_data_full/{args.dataset}_{args.canary}_100/seed{args.seed}/{args.dataset}_cnn_eps{args.epsilon}"
+path = f"exp_data/{args.dataset}_{args.canary}_100/seed{args.seed}/{args.dataset}_cnn_eps{args.epsilon}"
 
 X, y, outdim = load_data(args.dataset, None, split='train')
 
