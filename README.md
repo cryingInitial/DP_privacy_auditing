@@ -15,11 +15,11 @@ $ bash scripts/train_mnist.sh
 After you have completed the pretraining phase of your model, you can perform a privacy leakage audit. The following command allows you to run input-space auditing using three different types of samples:
 
 - Canary Sample: A known reference sample used to test for direct data leaks.
-- **Uniform Distance Expansion** Sample (Ours): A baseline method to measure privacy risks by uniformly expanding the sample’s distance in input space.
+- **Uniform Distance Expansion** Sample (Ours): Optimized adversarial sample to ensure that models $M_i$ (model trained without canary) produce a higher loss and models $M'_i$ (model trained with canary) produce a lower loss when evaluating $a_w$, aiming to maximize the distinguishability between their output distributions.
 
 ![Equation](figures/ude.svg)
 
-- **Adaptive Distance Expansion** Sample (Ours): An advanced method that adaptively expands distances based on the model’s behavior, potentially providing more sensitive and revealing insights.
+- **Adaptive Distance Expansion** Sample (Ours): An advanced method that focuses solely on the overlapping regions of the loss distributions, avoiding training on already distinguishable values. This targeted approach improves the distinction between the distributions.
 
 ![Equation](figures/ade.svg)
 ```bash
